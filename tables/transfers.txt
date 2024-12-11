@@ -1,0 +1,3 @@
+PATPER	n_transfers	n_same_sector_diff_room	n_diff_sector	patient_days
+1	8 (11.3)	2 (2.82)	6 (8.47)	708
+4	7 (14.77)	2 (4.22)	5 (10.55)	474

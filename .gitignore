@@ -47,3 +47,16 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Raw data
+data/
+
+# Old analyses
+figures/AMR_COVID-Data-230803/
+figures/AMR_COVID-Data-230615/
+tables/AMR_COVID-Data-230803/
+tables/AMR_COVID-Data-230615/
+
+# Bash files
+cpp/mcmc/old/
+cpp/old/
