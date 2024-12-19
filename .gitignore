@@ -25,6 +25,9 @@
 vignettes/*.html
 vignettes/*.pdf
 
+# Mac
+/*.DS_Store
+
 # OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
 .httr-oauth
 
@@ -52,10 +55,14 @@ rsconnect/
 data/
 
 # Old analyses
-figures/AMR_COVID-Data-230803/
-figures/AMR_COVID-Data-230615/
-tables/AMR_COVID-Data-230803/
-tables/AMR_COVID-Data-230615/
+figures/AMR-COVID-Data-230803/
+figures/AMR-COVID-Data-230615/
+tables/AMR-COVID-Data-230803/
+tables/AMR-COVID-Data-230615/
+
+# R files
+R/1.descriptive_analysis.R
+R/2.generate_data_for_model.R
 
 # Bash files
 cpp/mcmc/old/

@@ -9,6 +9,19 @@ factor_oui_non = function(var1) {
 }
 
 ################################################################################
+# Data management
+################################################################################
+# Unroll dates 
+unroll_days = function(df) {
+  out = data.frame(
+    REASEC = df$REASEC,
+    Date_day = seq.Date(df$REAENT, df$REASOR, by = 1)
+  ) %>%
+    filter(row_number() <= n()-1)
+  return(out)
+}
+
+################################################################################
 # Data analysis
 ################################################################################
 # Get episode type

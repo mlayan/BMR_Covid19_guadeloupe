@@ -1,22 +1,22 @@
 periods = c(
-  "Période pré-COVID (01/01/2020-31/01/2020)", 
-  "3e vague COVID (15/04/2021-14/05/2021)", 
-  "4e vague COVID (07/08/2021-06/09/2021)", 
-  "Période inter-vague (01/05/2022-31/05/2022)"
+  "Période pré-COVID (01/01/2020-31/01/2020)" = "Period 1", 
+  "3e vague COVID (15/04/2021-14/05/2021)" = "Period 2", 
+  "4e vague COVID (07/08/2021-06/09/2021)" = "Period 3", 
+  "Période inter-vague (01/05/2022-31/05/2022)" = "Period 4"
   )
 
 periods_start = as.Date(c(
-  "2020-01-01", 
-  "2021-04-15", 
-  "2021-08-07", 
-  "2022-05-01"
+  "Period 1" = "2020-01-01", 
+  "Period 2" = "2021-04-15", 
+  "Period 3" = "2021-08-07", 
+  "Period 4" = "2022-05-01"
   ))
 
 periods_end = as.Date(c(
-  "2020-01-31", 
-  "2021-05-14", 
-  "2021-09-06", 
-  "2022-05-31"
+  "Period 1" = "2020-01-31", 
+  "Period 2" = "2021-05-14", 
+  "Period 3" = "2021-09-06", 
+  "Period 4" = "2022-05-31"
   ))
 
 period_names_bold = c(
