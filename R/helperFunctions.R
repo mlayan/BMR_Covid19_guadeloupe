@@ -16,14 +16,227 @@ unroll_days = function(df) {
   out = data.frame(
     REASEC = df$REASEC,
     Date_day = seq.Date(df$REAENT, df$REASOR, by = 1)
-  ) %>%
-    filter(row_number() <= n()-1)
+  ) #%>%
+    #filter(row_number() <= n()-1)
   return(out)
+}
+
+################################################################################
+# Intubation dates
+################################################################################
+getWardInfo = function(df) {
+  # Convert to dates
+  df = df %>%
+    mutate(
+      PATSTART = as_date(PATSTART), 
+      PATEND = as_date(PATEND), 
+      REAENT = as_date(REAENT),
+      REASOR1 = as_date(REASOR1),
+      REASOR2 = as_date(REASOR2),
+      REASOR3 = as_date(REASOR3),
+      REASOR4 = as_date(REASOR4),
+      REASOR5 = as_date(REASOR5),
+      REAINT1D = as_date(REAINT1D),
+      REAINT1F = as_date(REAINT1F),
+      REAINT2D = as_date(REAINT2D),
+      REAINT2F = as_date(REAINT2F),
+      REAINT3D = as_date(REAINT3D),
+      REAINT3F = as_date(REAINT3F),
+      REAINT4D = as_date(REAINT4D),
+      REAINT4F = as_date(REAINT4F)
+    )
+  
+  # Output dataframe
+  out = data.frame(
+    Date_day = seq.Date(df$PATSTART, df$PATEND, 1),
+    Secteur = NA,
+    present = 0,
+    covid = 0,
+    intub = 0
+  )  
+  
+  # Present in the ward with secteur
+  for (i in 1:5) {
+    s = df[[paste0("REASOR", i)]]
+    l = df[[paste0("REASEC", i)]]
+    if (i == 1) e = df$REAENT
+    if (i > 1) e = df[[paste0("REASOR", i-1)]]
+    
+    if (!is.na(s)) {
+      out$present[out$Date_day >= e & out$Date_day <= s] = 1
+      out$Secteur[out$Date_day >= e & out$Date_day <= s] = l
+    } else {
+      break
+    }
+  }
+  
+  # Intubated
+  if (df$REAINT == "OUI") {
+    for (i in 1:4) {
+      s = df[[paste0("REAINT", i, "D")]]
+      e = df[[paste0("REAINT", i, "F")]]
+      
+      if (!is.na(s) & !is.na(e) & sum(out$Date_day >= s & out$Date_day <= e) > 0) {
+        out$intub[out$Date_day >= s & out$Date_day <= e] = 1
+      } 
+    }
+  }
+  
+  # Covid-19 status
+  if (df$INFCOV == "OUI") out$covid[out$present == 1] = 1
+  
+  return(out) 
 }
 
 ################################################################################
 # Data analysis
 ################################################################################
+# New algorithms to classify episodes
+classifyEpisodes = function(df, list_pvt, algo, detailed = F) {
+  out = df %>% 
+    distinct(REAENT, REASOR, REABCAD, REABCAE) %>%
+    summarise(REAENT = min(REAENT), REASOR = max(REASOR), REABCAD = unique(REABCAD), REABCAE = unique(REABCAE))
+  df = df %>% 
+    arrange(PVTDAT) %>% 
+    filter(PVTNAT %in% list_pvt, PVTDAT >= REAENT, PVTDAT <= REASOR) %>% 
+    mutate(PVTID = match(PVTDAT, unique(PVTDAT)),
+           PVTRES = ifelse(PVTRES %in% "Négatif", "negative", "positive"))
+  
+  if (algo == 'algo 1') out = classifyEpisodes_algo1(df, out, detailed) 
+  if (algo == 'algo 2') out = classifyEpisodes_algo2(df, out, detailed) 
+  
+  return(out)
+}
+
+classifyEpisodes_algo1 = function(df, out, detailed = F) {
+  
+  within48 = df %>% filter(PVTDAT >= REAENT, PVTDAT <= REAENT+2)
+  after48 = df %>% filter(PVTDAT > REAENT+2)
+  if (nrow(after48)>0) m = min(after48$PVTID)
+  
+  # Not tested
+  if (nrow(df) == 0) {
+    if (out$REABCAE == "Yes" & 
+        !is.na(out$REABCAD) & 
+        as.numeric(difftime(out$REAENT, out$REABCAD, units = "day")) <= 7) {
+      out$episode = 'Positive before' 
+    } else {
+      out$episode = 'Not tested'
+    }
+  }
+  
+  # Tested upon admission (within 48h)
+  if (nrow(within48) > 0) {
+    if (any(within48$PVTRES == "positive")) out$episode = "Positive"
+    if (all(within48$PVTRES == "negative") & any(after48$PVTRES == "positive")) out$episode = "Acquisition"
+    if (all(df$PVTRES == "negative")) out$episode = "Negative"    
+  }
+  
+  # Tested after 48 h
+  if (nrow(df) > 0 & nrow(within48) == 0) {
+    if (out$REABCAE == "Yes" &
+        !is.na(out$REABCAD) & 
+        as.numeric(difftime(out$REAENT, out$REABCAD, units = "day")) <= 7) {
+      out$episode = "Positive before"
+    } else {
+      if (any(after48$PVTRES[after48$PVTID == m] == "positive")) out$episode = "Potential positive"
+      if (all(after48$PVTRES[after48$PVTID == m] == "negative") & any(after48$PVTRES == "positive")) out$episode = "Potential acquisition"
+      if (all(after48$PVTRES == "negative")) out$episode = "Potential negative"  
+    }
+  }
+  
+  return(out)
+}
+
+classifyEpisodes_algo2 = function(df, out, detailed = F) {
+  
+  # Not tested 
+  not_tested = ifelse(nrow(df) == 0, 1, 0)
+  
+  # Status upon admission
+  within48 = df %>% filter(PVTDAT >= REAENT, PVTDAT <= REAENT+2)
+  
+  status_admission = 0
+  if (nrow(within48) > 0) status_admission = 1
+  if (nrow(within48) == 0 & !is.na(out$REABCAD) & difftime(out$REAENT, out$REABCAD, units = "days") <= 7) {
+    status_admission = 1
+    df = df %>%
+      add_row(REAENT = out$REAENT, REASOR = out$REASOR, PVTDAT = out$REAENT, PVTRES = "positive", .before = 1)
+  }
+  
+  # Test sequence smoothing
+  intern_samples = c("Aspiration bronchique", "Aspiration duodénale", "Aspiration endo-trachéale",
+                     "LBA", "LCR", "Liquide d'ascite", "Liquide de ponction articulaire ou synoviale",
+                     "Liquide péricardique", "Liquide péritonéal", "Liquide pleural", "PDP")
+  other_samples = c("Cathéter", "Cornée", "Crachat", "Drain", "Gorge", "Nasopharynx", "Prélèvement ORL",
+                    "Pus", "Sang cathéter", "Selles", "Sonde", "Urine", "Vaginal")
+  
+  if ("REASEC" %in% colnames(df)) df = df %>% group_by(REAENT, REASOR, PVTDAT, REASEC)
+  if (!"REASEC" %in% colnames(df)) df = df %>% group_by(REAENT, REASOR, PVTDAT)
+  df = df %>%
+    # Multiple tests on the same day --> Positive tests dominate negative tests 
+    summarise(
+      PVTRES = case_when(
+        all(PVTRES %in% "negative") ~ "negative",
+        any(PVTRES %in% "positive") ~ "positive",
+        all(is.na(PVTRES)) ~ NA,
+      .default = "?"
+      ), 
+      PVTNAT = case_when(
+        all(PVTNAT %in% "Pvt rectal") ~ "Pvt rectal",
+        any(PVTNAT %in% "Sang périphérique") ~ "Sang périphérique",
+        any(PVTNAT %in% intern_samples) & all(!PVTNAT %in% "Sang périphérique") ~ "intern",
+        any(PVTNAT %in% other_samples) & all(!PVTNAT %in% c("Sang périphérique", intern_samples)) ~ "other",
+        .default = "before study"
+          ),
+      .groups = "drop"
+      ) %>%
+    # Smooth sequence
+    mutate(
+      PVTRES = case_when(
+        is.na(lag(PVTRES)) ~ PVTRES,
+        (PVTRES == "negative" & lag(PVTRES, 1) == "positive" & is.na(lead(PVTRES, 1)) ) | 
+          (PVTRES == "negative" & lag(PVTRES, 1) == "positive" & lead(PVTRES, 1) == "negative" & is.na(lead(PVTRES, 2)) ) |
+          (PVTRES == "negative" & lag(PVTRES, 1) == "positive" & lead(PVTRES, 1) == "positive" ) | 
+          (PVTRES == "negative" & lag(PVTRES, 1) == "positive" & lead(PVTRES, 1) == "negative" &  lead(PVTRES, 2) == "positive" ) ~ "positive",
+        .default = PVTRES
+      )
+    )
+  
+  # Classification of the episode
+  episode = NA
+  split_res = split(df$PVTRES, rleid(df$PVTRES))
+  if (status_admission) {
+    # Clear episodes
+    if (all(df$PVTRES == "positive")) episode = "Positive"
+    if (all(df$PVTRES == "negative")) episode = "Negative"
+    if (length(split_res) == 2 & all(split_res[[1]] == "negative")) episode = "Acquisition"
+    if (length(split_res) == 2 & all(split_res[[1]] == "positive")) episode = "Decolonization"
+    if (length(split_res) > 2) episode = "Complex"
+  }
+  if (!not_tested & !status_admission) {
+    # Potential episodes
+    if (all(df$PVTRES == "positive")) episode = "Potential positive"
+    if (all(df$PVTRES == "negative")) episode = "Potential negative"
+    if (length(split_res) == 2 & all(split_res[[1]] == "negative")) episode = "Potential acquisition"
+    if (length(split_res) == 2 & all(split_res[[1]] == "positive")) episode = "Potential decolonization"
+    if (length(split_res) > 2) episode = "Potential complex"
+  }
+  if (not_tested & !status_admission) episode = "Not tested"
+  if (not_tested & status_admission) episode = "Positive"
+  
+  out$episode = episode
+  if (detailed) {
+    if (nrow(df) == 0) {
+      df = df %>% add_row(REAENT = out$REAENT, REASOR = out$REASOR)
+      return(df)
+    } else {
+      return(df)
+    }
+  }
+  if (!detailed) return(out)
+}
+
 # Get episode type
 # 0: no test
 # 1: only negative tests
